@@ -9,13 +9,15 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=6)
+    # bcrypt_sha256 supports long inputs; cap for validation and payload sanity
+    password: str = Field(min_length=6, max_length=256)
 
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=100)
     status: Optional[str] = None
+    password: Optional[str] = Field(default=None, min_length=6, max_length=256)
 
 
 class UserOut(UserBase):
-    id: int
+    id: str
