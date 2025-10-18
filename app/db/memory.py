@@ -22,7 +22,7 @@ def update_user(user_id: int, data: UserUpdate) -> Optional[UserOut]:
     user = get_user(user_id)
     if not user:
         return None
-    updated = user.copy(update=data.dict(exclude_unset=True))
+    updated = user.model_copy(update=data.model_dump(exclude_unset=True))
     idx = _db.index(user)
     _db[idx] = updated
     return updated

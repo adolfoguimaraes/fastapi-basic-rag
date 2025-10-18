@@ -1,3 +1,14 @@
+"""
+Rotas de usuários (CRUD) da API.
+
+- Depende de `get_db()` para acesso ao MongoDB (vide app/db/mongo.py).
+- Usa Passlib `CryptContext` para hash de senha.
+- Endpoints: listar, obter por id, criar, atualizar e excluir.
+
+Variáveis de ambiente (indiretas):
+- MONGODB_URI e MONGODB_DB, configuradas no módulo de banco.
+"""
+
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional
 from bson import ObjectId
@@ -5,16 +16,15 @@ from passlib.context import CryptContext
 from app.schemas.user import UserOut, UserCreate, UserUpdate
 from app.db.mongo import get_db
 
-"""
-Password hashing context:
-- Uses pbkdf2_sha256 as the default to avoid bcrypt backend/72-byte issues.
-- Keeps bcrypt_sha256 and bcrypt for backward-compatibility verification (if any existing hashes).
-"""
+# Password hashing context:
+# - pbkdf2_sha256 como padrão para evitar limitações/erros com bcrypt (72 bytes).
+# - Mantém bcrypt_sha256 e bcrypt para verificação retrocompatível de hashes.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt_sha256", "bcrypt"], deprecated="auto")
 router = APIRouter(tags=["users"]) 
 
 
 def _to_user_out(doc) -> UserOut:
+    """Converte um documento do MongoDB para o schema de saída `UserOut`."""
     return UserOut(
         id=str(doc["_id"]),
         name=doc["name"],
@@ -25,6 +35,7 @@ def _to_user_out(doc) -> UserOut:
 
 @router.get("/users", response_model=List[UserOut])
 async def list_users_endpoint(status: Optional[str] = None, db=Depends(get_db)):
+    """Lista usuários com filtro opcional por `status`. Retorna 200 com a coleção."""
     query = {"status": status} if status else {}
     cursor = db["users"].find(query)
     docs = [doc async for doc in cursor]
@@ -33,6 +44,12 @@ async def list_users_endpoint(status: Optional[str] = None, db=Depends(get_db)):
 
 @router.get("/users/{user_id}", response_model=UserOut)
 async def get_user_endpoint(user_id: str, db=Depends(get_db)):
+    """Obtém um usuário por ID.
+
+    Regras:
+    - 400: ID inválido.
+    - 404: usuário não encontrado.
+    """
     try:
         oid = ObjectId(user_id)
     except Exception:
@@ -46,6 +63,13 @@ async def get_user_endpoint(user_id: str, db=Depends(get_db)):
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user_endpoint(data: UserCreate, db=Depends(get_db)):
+    """Cria um usuário.
+
+    Regras:
+    - 409: e-mail já utilizado.
+    - 400: falha ao gerar hash da senha.
+    - 201: criado com sucesso.
+    """
     # Verifica duplicidade de email
     if await db["users"].find_one({"email": data.email}):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
@@ -67,12 +91,19 @@ async def create_user_endpoint(data: UserCreate, db=Depends(get_db)):
 
 @router.put("/users/{user_id}", response_model=UserOut)
 async def update_user_endpoint(user_id: str, data: UserUpdate, db=Depends(get_db)):
+    """Atualiza campos parciais de um usuário.
+
+    Regras:
+    - Re-hash de senha quando `password` é fornecida.
+    - 400: ID inválido ou falha ao gerar hash.
+    - 404: usuário não encontrado.
+    """
     try:
         oid = ObjectId(user_id)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user id")
 
-    update_doc = {k: v for k, v in data.dict(exclude_unset=True).items() if k != "password"}
+    update_doc = {k: v for k, v in data.model_dump(exclude_unset=True).items() if k != "password"}
     if data.password:
         try:
             update_doc["password_hash"] = pwd_context.hash(data.password)
@@ -91,6 +122,13 @@ async def update_user_endpoint(user_id: str, data: UserUpdate, db=Depends(get_db
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_endpoint(user_id: str, db=Depends(get_db)):
+    """Exclui um usuário por ID.
+
+    Regras:
+    - 400: ID inválido.
+    - 404: usuário não encontrado.
+    - 204: exclusão bem-sucedida sem corpo de resposta.
+    """
     try:
         oid = ObjectId(user_id)
     except Exception:
