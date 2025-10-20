@@ -13,8 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 import io
 from app.db.mongo import get_db
 from app.schemas.rag import UploadDocResponse, AskRequest, AnswerResponse
-from app.rag.store import upsert_document, search_similar_chunks
+from app.rag.store import upsert_document, search_similar_chunks, get_owned_document_oid
 from app.llm.openai_client import embed_texts, chat_completion
+from app.deps.auth import get_current_user_id
 from pypdf import PdfReader
 
 router = APIRouter(tags=["rag"])
@@ -22,6 +23,7 @@ router = APIRouter(tags=["rag"])
 @router.post("/rag/documents", response_model=UploadDocResponse)
 async def upload_document(
     db=Depends(get_db),
+    current_user_id: str = Depends(get_current_user_id),
     # multipart com PDF
     file: UploadFile = File(...),
     title: str = Form(...),
@@ -48,7 +50,7 @@ async def upload_document(
     if not text or not text.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Não foi possível extrair texto do PDF")
 
-    res = await upsert_document(db, title, text)
+    res = await upsert_document(db, title, text,owner_id=current_user_id)
     return UploadDocResponse(**res)
 
 
@@ -88,7 +90,10 @@ def _extract_text_from_pdf_bytes(data: bytes) -> str:
 
 
 @router.post("/rag/ask", response_model=AnswerResponse)
-async def ask(body: AskRequest, db=Depends(get_db)):
+async def ask(
+    body: AskRequest, 
+    db=Depends(get_db),
+    current_user_id: str = Depends(get_current_user_id)):
     """Responde uma pergunta com base em chunks mais similares ao contexto do documento.
 
     Etapas:
@@ -97,6 +102,12 @@ async def ask(body: AskRequest, db=Depends(get_db)):
     3) Monta prompt (system/user) e chama LLM.
     4) Retorna resposta e fontes (ids dos chunks).
     """
+
+    # Verifica s o documento pertence ao usuário
+    oid = await get_owned_document_oid(db, body.doc_id, current_user_id)
+    if not oid:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found or not owned by user")
+
     # 1) embedding da pergunta
     q_emb = embed_texts([body.question])[0]
     

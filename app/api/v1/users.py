@@ -15,6 +15,7 @@ from bson import ObjectId
 import bcrypt
 from app.schemas.user import UserOut, UserCreate, UserUpdate
 from app.db.mongo import get_db
+from app.deps.auth import get_current_user_id
 
 router = APIRouter(tags=["users"]) 
 
@@ -38,7 +39,11 @@ def hash_password(plain_password: str) -> str:
 
 
 @router.get("/users", response_model=List[UserOut])
-async def list_users_endpoint(status: Optional[str] = None, db=Depends(get_db)):
+async def list_users_endpoint(
+    status: Optional[str] = None, 
+    db=Depends(get_db),
+    create_user_id: str = Depends(get_current_user_id)
+):
     """Lista usuários com filtro opcional por `status`. Retorna 200 com a coleção."""
     query = {"status": status} if status else {}
     cursor = db["users"].find(query)
@@ -47,7 +52,11 @@ async def list_users_endpoint(status: Optional[str] = None, db=Depends(get_db)):
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
-async def get_user_endpoint(user_id: str, db=Depends(get_db)):
+async def get_user_endpoint(
+    user_id: str, 
+    db=Depends(get_db),
+    current_user_id: str = Depends(get_current_user_id),
+):
     """Obtém um usuário por ID.
 
     Regras:
@@ -66,7 +75,11 @@ async def get_user_endpoint(user_id: str, db=Depends(get_db)):
 
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def create_user_endpoint(data: UserCreate, db=Depends(get_db)):
+async def create_user_endpoint(
+    data: UserCreate, 
+    db=Depends(get_db),
+    current_user_id: str = Depends(get_current_user_id),
+    ):
     """Cria um usuário.
 
     Regras:
@@ -94,7 +107,12 @@ async def create_user_endpoint(data: UserCreate, db=Depends(get_db)):
 
 
 @router.put("/users/{user_id}", response_model=UserOut)
-async def update_user_endpoint(user_id: str, data: UserUpdate, db=Depends(get_db)):
+async def update_user_endpoint(
+    user_id: str, 
+    data: UserUpdate, 
+    db=Depends(get_db),
+    current_user_id: str = Depends(get_current_user_id)
+    ):
     """Atualiza campos parciais de um usuário.
 
     Regras:
@@ -125,7 +143,11 @@ async def update_user_endpoint(user_id: str, data: UserUpdate, db=Depends(get_db
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user_endpoint(user_id: str, db=Depends(get_db)):
+async def delete_user_endpoint(
+    user_id: str, 
+    db=Depends(get_db),
+    current_user_id: str = Depends(get_current_user_id)
+    ):
     """Exclui um usuário por ID.
 
     Regras:

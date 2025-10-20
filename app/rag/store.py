@@ -9,14 +9,18 @@ Variáveis de ambiente (indiretas):
 - MONGODB_URI, MONGODB_DB (ver app/db/mongo.py).
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from app.llm.openai_client import embed_texts
 from app.rag.chunk import simple_chunk
 
 # Usa motor no app para obter db (get_db). Aqui, implementamos funções de alto nível.
 
-async def upsert_document(db, title: str, content: str) -> Dict[str, Any]:
+async def upsert_document(
+        db, 
+        title: str, 
+        content: str,
+        owner_id: str) -> Dict[str, Any]:
     """Insere/atualiza documento base e seus chunks com embeddings.
 
     Fluxo:
@@ -31,6 +35,7 @@ async def upsert_document(db, title: str, content: str) -> Dict[str, Any]:
     res = await db["documents"].insert_one({
         "title": title,
         "content": content,
+        "owner": owner_id,
     })
     document_id = res.inserted_id
 
@@ -51,6 +56,22 @@ async def upsert_document(db, title: str, content: str) -> Dict[str, Any]:
         await db["chunks"].insert_many(docs)
     return {"doc_id": str(document_id), "chunks": len(docs)}
 
+async def get_owned_document_oid(
+        db,
+        document_id: str,
+        owner_id: str
+) -> Optional[ObjectId]: 
+    """Retorna o ObjectId do documento se pertencer ao owner; caso contrário, None."""
+    try:
+        oid = ObjectId(document_id)
+    except Exception:
+        return None
+    
+    doc = await db["documents"].find_one({"_id": oid, "owner": owner_id})
+    
+    if not doc:
+        return None
+    return oid
 
 async def search_similar_chunks(db, doc_id: str, query_embedding: List[float], k: int = 5) -> List[Dict[str, Any]]:
     """Busca chunks similares por vetor usando `$vectorSearch` na coleção `chunks`.
