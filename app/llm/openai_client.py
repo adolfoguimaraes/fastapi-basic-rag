@@ -6,6 +6,7 @@ Cliente OpenAI para embeddings e chat.
 
 Variáveis de ambiente:
 - OPENAI_API_KEY: chave da API.
+- OPENAI_BASE_URL: endpoint compatível com API OpenAI (ex.: Ollama em http://localhost:11434/v1).
 - OPENAI_EMBEDDING_MODEL: modelo de embedding (padrão: "text-embedding-3-large").
 - OPENAI_CHAT_MODEL: modelo de chat (padrão: "gpt-4o-mini").
 """
@@ -18,7 +19,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-CLIENT = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+CLIENT = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
 CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 
